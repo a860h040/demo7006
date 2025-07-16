@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Daptomycin Compounding Tracker + AI + Secure Push</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0/dist/tf.min.js"></script>
+<style>
+:root {
+  --primary: #007acc;
+  --accent: #d9eaff;
+  --bg: #fdfefe;
+  --glass: rgba(255,255,255,0.2);
+  --border-glass: rgba(255,255,255,0.4);
+  --text: #333;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: 'Poppins', sans-serif;
+  background: radial-gradient(circle at 40% 40%, var(--bg), #e0f4ff);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 40px auto;
+  padding: 32px 48px;
+  background: var(--glass);
+  border: 1px solid var(--border-glass);
+  border-radius: 60px;
+  backdrop-filter: blur(60px);
+  box-shadow: 0 60px 180px rgba(0,0,0,0.7), inset 0 0 50px rgba(255,255,255,0.15);
+  max-width: 1200px;
+}
+header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 60px;
+  padding: 2px;
+  background: linear-gradient(270deg, #007acc, #d9eaff, #007acc);
+  background-size: 1600% 1600%;
+  animation: gradientBorder 28s ease infinite;
+  z-index: -1;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+header h1 {
+  font-size: 3em;
+  color: var(--primary);
+}
+.button {
+  background: var(--primary);
+  color: white;
+  padding: 24px 44px;
+  border: none;
+  border-radius: 34px;
+  font-size: 15px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 30px 100px rgba(0,122,204,0.9);
+  transition: all 0.5s ease;
+}
+.button::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  background: rgba(255,255,255,0.4);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 1.3s, height 1.3s;
+}
+.button:hover::after {
+  width: 400%; height: 400%;
+}
+.button:hover {
+  background: #005fa3;
+  transform: translateY(-8px) scale(1.14);
+  box-shadow: 0 40px 120px rgba(0,122,204,1);
+}
+.button:active { transform: scale(0.88); }
+.button.tooltip-hint:hover::before {
+  content: attr(data-hint);
+  position: absolute;
+  bottom: 140%; left: 50%;
+  transform: translateX(-50%);
+  background: #007acc;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 14px;
+  font-size: 12px;
+  animation: fadeBounce 1s forwards;
+}
+@keyframes fadeBounce {
+  0% {opacity:0; transform: translateX(-50%) scale(0.8);}
+  60% {opacity:1; transform: translateX(-50%) scale(1.1);}
+  100% {opacity:1; transform: translateX(-50%) scale(1);}
+}
+@keyframes gradientBorder {
+  0% {background-position: 0% 50%;}
+  50% {background-position: 100% 50%;}
+  100% {background-position: 0% 50%;}
+}
+.page {
+  display: none;
+  opacity: 0;
+  transform: translateY(60px);
+  transition: opacity 1.3s, transform 1.3s;
+}
+.page.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+.form-section, .camera-section {
+  background: var(--glass);
+  border: 1px solid var(--border-glass);
+  border-radius: 64px;
+  backdrop-filter: blur(62px);
+  padding: clamp(40px, 6vw, 72px);
+  margin: 42px auto;
+  max-width: 1200px;
+  box-shadow: 0 65px 190px rgba(0,0,0,0.8), inset 0 0 80px rgba(255,255,255,0.12);
+  transition: box-shadow 0.6s;
+}
+.form-section:hover, .camera-section:hover {
+  box-shadow: 0 80px 200px rgba(0,0,0,0.85), inset 0 0 90px rgba(255,255,255,0.18);
+}
+.input-card {
+  position: relative;
+  margin-bottom: 42px;
+}
+.input-card input, .input-card textarea {
+  padding: 28px;
+  border: 2px solid rgba(0,0,0,0.35);
+  border-radius: 32px;
+  font-size: 15px;
+  background: rgba(255,255,255,0.8);
+  width: 100%;
+  transition: border 0.6s, box-shadow 0.6s, transform 0.5s;
+}
+.input-card label {
+  position: absolute;
+  top: 22px; left: 28px;
+  color: #555;
+  font-size: 14px;
+  pointer-events: none;
+  transition: 0.35s;
+}
+.input-card input:focus + label,
+.input-card input:not(:placeholder-shown) + label,
+.input-card textarea:focus + label,
+.input-card textarea:not(:placeholder-shown) + label {
+  top: -18px;
+  left: 24px;
+  font-size: 12px;
+  background: var(--bg);
+  padding: 0 6px;
+  color: var(--primary);
+}
+.input-card input:focus, .input-card textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 36px rgba(0,122,204,1);
+  transform: translateY(-6px);
+  animation: pulse 1.8s infinite alternate;
+  outline: none;
+}
+@keyframes pulse {
+  from { box-shadow: 0 0 36px rgba(0,122,204,1);}
+  to { box-shadow: 0 0 50px rgba(0,122,204,1);}
+}
+.camera-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 68px;
+}
+#videoWrapper {
+  position: relative;
+  border-radius: 58px;
+  overflow: hidden;
+  box-shadow: 0 70px 200px rgba(0,0,0,0.85);
+  transition: transform 1.4s cubic-bezier(.25,.46,.45,.94);
+}
+#videoWrapper:hover {
+  transform: rotateX(10deg) rotateY(-10deg);
+}
+video {
+  width: 100%;
+  border-radius: 58px;
+}
+.signature {
+  margin-top: 30px;
+  background: linear-gradient(270deg, rgba(0,122,204,0.25), rgba(217,234,255,0.25));
+  animation: sigBgAnim 14s ease infinite;
+  border-radius: 28px;
+  padding: 10px;
+}
+@keyframes sigBgAnim {
+  0%{background-position:0% 50%;}
+  50%{background-position:100% 50%;}
+  100%{background-position:0% 50%;}
+}
+.signature canvas {
+  width: 100%;
+  height: 210px;
+  border: 2px dashed #007acc;
+  border-radius: 26px;
+  background: rgba(255,255,255,0.55);
+}
+.preview-section h2 {
+  margin: 68px 24px 32px;
+}
+#imagePreviews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 36px;
+  margin: 0 24px;
+}
+.img-wrapper {
+  position: relative;
+  width: 260px;
+  height: 200px;
+  border-radius: 38px;
+  overflow: hidden;
+  box-shadow: 0 54px 170px rgba(0,0,0,0.75);
+  transition: transform 0.6s ease, opacity 0.6s ease;
+  opacity: 0;
+}
+.img-wrapper.show {
+  opacity: 1;
+  transform: scale(1);
+}
+.delete-btn {
+  position: absolute;
+  top: 12px; right: 12px;
+  background: red;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 42px; height: 42px;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 14px 42px rgba(0,0,0,0.7);
+}
+@media (max-width: 900px) { .camera-layout { grid-template-columns: 1fr; } }
+body.dark {
+  background: #01060c;
+  color: #e0e0e0;
+}
+body.dark header, body.dark .form-section, body.dark .camera-section {
+  background: rgba(12,20,30,0.94);
+  border: 1px solid rgba(255,255,255,0.55);
+}
+body.dark input, body.dark textarea {
+  background: rgba(50,50,70,0.9);
+  color: #fff;
+  border: 2px solid #555;
+}
+body.dark .img-wrapper { box-shadow: 0 70px 210px rgba(255,255,255,0.3); }
+</style>
+</head>
+
+<body>
+<div class="app">
+<header>
+  <h1>Compounding Log</h1>
+  <button id="toggleTheme" class="button" style="background:white;color:var(--primary);"> Toggle Theme</button>
+</header>
+<div id="page1" class="page active">
+  <div class="form-section">
+    <h2>Enter Patient & Technician Info</h2>
+    <div class="input-card"><input type="text" id="ptName" placeholder=" "><label>Patient Name</label></div>
+    <div class="input-card"><input type="text" id="techName" placeholder=" "><label>Technician Name</label></div>
+    <div class="input-card"><input type="date" id="dob" placeholder=" "><label>Date of Birth</label></div>
+    <div class="input-card"><textarea id="notes" rows="2" placeholder=" "></textarea><label>Notes</label></div>
+    <div class="signature">
+      <label>Technician Signature</label>
+      <canvas id="signaturePad"></canvas>
+    </div>
+    <button class="button" id="nextToCamera">Next </button>
+    <button class="button" onclick="restorePrevious()" style="margin-left:16px;">Restore Last Session</button>
+  </div>
+</div>
+<div id="page2" class="page">
+  <div class="camera-layout">
+    <div class="camera-section">
+      <div id="videoWrapper">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="analysisOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+      </div>
+      <button class="button tooltip-hint" id="flipCamera" data-hint="Switch camera" style="margin-top:28px;"> Flip Camera</button>
+    </div>
+    <div class="camera-section">
+      <h3>Step-by-Step</h3>
+      <p id="taskText"></p>
+      <button class="button tooltip-hint" id="captureStep" data-hint="Capture & analyze"> Capture</button>
+      <div style="margin:32px 0;">
+        <button class="button tooltip-hint" id="prevTask" data-hint="Previous step"> Prev</button>
+        <button class="button tooltip-hint" id="nextTask" data-hint="Next step">Next </button>
+      </div>
+      <label>Zoom <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1" style="width:60%;margin:0 12px;"><span id="zoomValue">1.0?</span></label>
+      <div style="margin-top:32px;">
+        <button class="button tooltip-hint" id="download" style="display:none;" data-hint="Export PDF + send">Export PDF</button>
+      </div>
+    </div>
+  </div>
+  <div class="preview-section">
+    <h2>Captured (<span id="count">0</span>/6)</h2>
+    <div id="imagePreviews"></div>
+    <p id="status" style="margin:0 24px;"></p>
+  </div>
+</div>
+<div id="zoomModal"><img id="zoomedImage"></div>
+<canvas id="canvas" style="display:none;"></canvas>
+</div>
+
+<script>
+const ptNameInput=document.getElementById("ptName"),techNameInput=document.getElementById("techName"),
+dobInput=document.getElementById("dob"),notesInput=document.getElementById("notes"),
+video=document.getElementById("video"),canvas=document.getElementById("canvas"),
+taskText=document.getElementById("taskText"),captureStepBtn=document.getElementById("captureStep"),
+prevBtn=document.getElementById("prevTask"),nextBtn=document.getElementById("nextTask"),
+zoomSlider=document.getElementById("zoomSlider"),zoomValue=document.getElementById("zoomValue"),
+downloadBtn=document.getElementById("download"),imagePreviews=document.getElementById("imagePreviews"),
+status=document.getElementById("status"),countSpan=document.getElementById("count"),
+zoomModal=document.getElementById("zoomModal"),zoomedImage=document.getElementById("zoomedImage"),
+toggleThemeBtn=document.getElementById("toggleTheme"),signaturePad=document.getElementById("signaturePad"),
+analysisOverlay=document.getElementById("analysisOverlay");
+const tasks=["Capture supplies","Capture expiration dates","Set the IV repeater pump speed to 1 mL/s and the volume to 10 mL ","Capture an image of the 1000 mL NS bag and Inject into vial","Draw 10 mL of the drug","Inject into IV ball and apply label"];
+let currentTask=0,capturedImages=[],currentStream=null,videoDevices=[],currentDeviceIndex=0;
+let sigCtx=signaturePad.getContext("2d"),drawing=false,lastX=0,lastY=0;
+let tfModel=null;
+
+// signature pad
+signaturePad.addEventListener("mousedown",e=>{drawing=true;[lastX,lastY]=[e.offsetX,e.offsetY];});
+signaturePad.addEventListener("mouseup",()=>drawing=false);
+signaturePad.addEventListener("mousemove",e=>{
+  if(!drawing)return;
+  sigCtx.beginPath();sigCtx.moveTo(lastX,lastY);sigCtx.lineTo(e.offsetX,e.offsetY);
+  sigCtx.strokeStyle="#007acc";sigCtx.lineWidth=2;sigCtx.stroke();
+  [lastX,lastY]=[e.offsetX,e.offsetY];
+});
+signaturePad.addEventListener("touchstart",e=>{
+  e.preventDefault();drawing=true;
+  const rect=signaturePad.getBoundingClientRect();
+  [lastX,lastY]=[e.touches[0].clientX-rect.left,e.touches[0].clientY-rect.top];
+});
+signaturePad.addEventListener("touchmove",e=>{
+  e.preventDefault();if(!drawing)return;
+  const rect=signaturePad.getBoundingClientRect();
+  const x=e.touches[0].clientX-rect.left,y=e.touches[0].clientY-rect.top;
+  sigCtx.beginPath();sigCtx.moveTo(lastX,lastY);sigCtx.lineTo(x,y);
+  sigCtx.strokeStyle="#007acc";sigCtx.lineWidth=2;sigCtx.stroke();
+  [lastX,lastY]=[x,y];
+});
+signaturePad.addEventListener("touchend",()=>drawing=false);
+
+document.getElementById("nextToCamera").onclick=()=>{
+  if(!ptNameInput.value||!techNameInput.value||!dobInput.value)return alert("Fill all fields!");
+  saveData();document.getElementById("page1").classList.remove("active");
+  document.getElementById("page2").classList.add("active");
+  updateTaskDisplay();startVideo();
+};
+
+function updateTaskDisplay(){
+  taskText.textContent=`Step ${currentTask+1}/${tasks.length}: ${tasks[currentTask]}`;
+  prevBtn.disabled=currentTask===0;nextBtn.disabled=currentTask===tasks.length-1;
+  localStorage.setItem("comp_task",currentTask);
+}
+prevBtn.onclick=()=>{if(currentTask>0){currentTask--;updateTaskDisplay();}};
+nextBtn.onclick=()=>{if(currentTask<tasks.length-1){currentTask++;updateTaskDisplay();}};
+
+// AI load
+async function loadTfModel(){
+  tfModel=await tf.loadLayersModel('local_model/model.json');
+  console.log(" AI Model Loaded");
+}
+async function analyzeVolumeAI(){
+  if(!tfModel)return console.warn("No AI model loaded");
+  let tensor=tf.browser.fromPixels(canvas)
+    .resizeNearestNeighbor([128,128])
+    .toFloat().div(255).expandDims();
+  let pred=tfModel.predict(tensor);
+  let yLine=pred.dataSync()[0]*canvas.height;
+  let ctx=analysisOverlay.getContext("2d");
+  ctx.strokeStyle="lime";ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(0,yLine);
+  ctx.lineTo(canvas.width,yLine);ctx.stroke();
+  status.textContent+=` |  AIÅ${(yLine/canvas.height*10).toFixed(2)}mL`;
+}
+
+captureStepBtn.onclick=()=>{
+  if(capturedImages.length>=6)return alert("Max 6 images.");
+  const stepLabel=`Step ${currentTask+1}: ${tasks[currentTask]}`;
+  if(capturedImages.some(x=>x.label===stepLabel))return alert("Already captured.");
+  canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  canvas.getContext("2d").drawImage(video,0,0);
+  let dataURL=canvas.toDataURL("image/png");
+  capturedImages.push({data:dataURL,label:stepLabel,timestamp:new Date().toLocaleString()});
+  updatePreviews();status.textContent=` Captured ${stepLabel}`;
+  downloadBtn.style.display="inline-block";
+  analyzeVolumeAI();tinyConfetti();saveData();
+};
+
+function updatePreviews(){
+  imagePreviews.innerHTML="";countSpan.textContent=capturedImages.length;
+  capturedImages.forEach((imgObj,index)=>{
+    const wrapper=document.createElement("div");wrapper.className="img-wrapper";
+    const img=document.createElement("img");img.src=imgObj.data;
+    img.onclick=()=>{zoomedImage.src=imgObj.data;zoomModal.style.display="flex";};
+    const caption=document.createElement("div");
+    caption.style.cssText="position:absolute;bottom:0;background:rgba(0,0,0,0.6);color:white;font-size:10px;width:100%;padding:2px;";
+    caption.textContent=imgObj.label;
+    const del=document.createElement("button");
+    del.className="delete-btn";del.textContent="?";
+    del.onclick=()=>{capturedImages.splice(index,1);updatePreviews();saveData();};
+    wrapper.append(img,caption,del);imagePreviews.appendChild(wrapper);
+    setTimeout(()=>wrapper.classList.add("show"),50);
+  });
+}
+zoomModal.onclick=()=>zoomModal.style.display="none";
+zoomSlider.oninput=()=>{video.style.transform=`scale(${zoomSlider.value})`;zoomValue.textContent=`${parseFloat(zoomSlider.value).toFixed(1)}?`;};
+
+downloadBtn.onclick=async()=>{
+  const{jsPDF}=window.jspdf,pdf=new jsPDF("l","pt","a4"),
+  w=pdf.internal.pageSize.getWidth(),h=pdf.internal.pageSize.getHeight();
+  pdf.setFontSize(20);pdf.text("Daptomycin Compounding Summary",40,60);
+  pdf.setFontSize(12);
+  pdf.text(`Patient: ${ptNameInput.value}`,40,100);
+  pdf.text(`Technician: ${techNameInput.value}`,40,120);
+  pdf.text(`DOB: ${dobInput.value}`,40,140);
+  pdf.text("Notes:",40,170);
+  pdf.text(pdf.splitTextToSize(notesInput.value,w-80),40,190);
+  const sigData=signaturePad.toDataURL("image/png");
+  pdf.addImage(sigData,"PNG",40,220,180,80);
+  capturedImages.forEach((img,i)=>{
+    pdf.addPage("a4","landscape");pdf.text(img.label,40,40);
+    pdf.addImage(img.data,"PNG",40,60,w*0.8,w*0.6);
+    pdf.setFontSize(9);pdf.text(`Page ${i+2} | ${img.timestamp}`,40,h-20);
+  });
+
+  let pdfBlob=pdf.output("blob");
+  let formData=new FormData();
+  formData.append("pdf",pdfBlob,"CompoundingLog.pdf");
+  formData.append("metadata",JSON.stringify({
+    patient: ptNameInput.value,
+    technician: techNameInput.value,
+    dob: dobInput.value,
+    notes: notesInput.value,
+    capturedSteps: capturedImages
+  }));
+  fetch("https://your-secure-server.local/api/uploadCompoundingLog",{
+    method:"POST",
+    body:formData
+  })
+  .then(r=>r.json()).then(d=>console.log("Upload success",d))
+  .catch(err=>console.error("Upload failed",err));
+
+  pdf.save(`${ptNameInput.value}_Daptomycin.pdf`);bigConfetti();
+};
+
+toggleThemeBtn.onclick=()=>{
+  document.body.classList.toggle("dark");
+  toggleThemeBtn.textContent=document.body.classList.contains("dark")?" Light":"Dark";
+};
+async function startVideo(){
+  videoDevices=(await navigator.mediaDevices.enumerateDevices()).filter(x=>x.kind==="videoinput");
+  currentStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+  video.srcObject=currentStream;
+}
+document.getElementById("flipCamera").onclick=async()=>{
+  if(videoDevices.length<=1)return alert("No other camera.");
+  currentDeviceIndex=(currentDeviceIndex+1)%videoDevices.length;
+  if(currentStream)currentStream.getTracks().forEach(t=>t.stop());
+  currentStream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:videoDevices[currentDeviceIndex].deviceId}}});
+  video.srcObject=currentStream;
+};
+function tinyConfetti(){
+  for(let i=0;i<15;i++){
+    const conf=document.createElement("div");
+    conf.style.cssText=`position:fixed;width:6px;height:6px;background:hsl(${Math.random()*360},90%,60%);border-radius:50%;top:${Math.random()*100}%;left:${Math.random()*100}%;opacity:1;pointer-events:none;transform:translate(-50%,-50%) scale(${Math.random()*1.2+0.5});`;
+    document.body.appendChild(conf);
+    setTimeout(()=>{conf.style.transition="all 1.3s ease";conf.style.transform+=` translateY(${60+Math.random()*20}px)`;conf.style.opacity=0;},50);
+    setTimeout(()=>conf.remove(),1600);
+  }
+}
+function bigConfetti(){
+  for(let i=0;i<50;i++){
+    const conf=document.createElement("div");
+    conf.style.cssText=`position:fixed;width:${6+Math.random()*6}px;height:${6+Math.random()*6}px;background:hsl(${Math.random()*360},90%,55%);border-radius:${Math.random()<0.5?"50%":"4px"};top:${Math.random()*100}%;left:${Math.random()*100}%;opacity:1;pointer-events:none;transform:translate(-50%,-50%) scale(${Math.random()*1.5+0.8});`;
+    document.body.appendChild(conf);
+    setTimeout(()=>{conf.style.transition="all 2.4s ease";conf.style.transform+=` translateY(${130+Math.random()*40}px) rotate(${Math.random()*720}deg)`;conf.style.opacity=0;},50);
+    setTimeout(()=>conf.remove(),3000);
+  }
+}
+function saveData(){
+  localStorage.setItem("comp_pt",ptNameInput.value);
+  localStorage.setItem("comp_tech",techNameInput.value);
+  localStorage.setItem("comp_dob",dobInput.value);
+  localStorage.setItem("comp_notes",notesInput.value);
+  localStorage.setItem("comp_signature",signaturePad.toDataURL("image/png"));
+  localStorage.setItem("comp_images",JSON.stringify(capturedImages));
+  localStorage.setItem("comp_task",currentTask);
+}
+function restorePrevious(){
+  ptNameInput.value=localStorage.getItem("comp_pt")||"";
+  techNameInput.value=localStorage.getItem("comp_tech")||"";
+  dobInput.value=localStorage.getItem("comp_dob")||"";
+  notesInput.value=localStorage.getItem("comp_notes")||"";
+  let sig=localStorage.getItem("comp_signature");
+  if(sig){
+    let img=new Image();
+    img.onload=()=>sigCtx.drawImage(img,0,0,signaturePad.width,signaturePad.height);
+    img.src=sig;
+  }
+  let imgs=localStorage.getItem("comp_images");
+  if(imgs){capturedImages=JSON.parse(imgs);updatePreviews();}
+  let task=localStorage.getItem("comp_task");
+  if(task){currentTask=parseInt(task);updateTaskDisplay();}
+}
+window.onload=()=>{restorePrevious();loadTfModel();};
+</script>
+</body>
+</html>
+
